@@ -135,9 +135,9 @@ Concrete caution from the earlier simulation (NOT real data): the target “Xin 
 - `index.html` — light-default web UI with operator and evaluator workflows;
 - `README.md` — launch, schema, and user guide;
 - `manifest_template.json` — `{"samples":[],"pairs":[]}`;
-- `start_windows.bat`, `start_windows_lan.bat`, `start_windows_local_only.bat`, `start_local.sh`.
+- `start_windows.bat`, `start_windows_lan.bat`, `start_windows_local_only.bat`, `start_windows_python.bat`, `start_local.sh`, `start_lan.sh`, `start_macos.command`, `start_macos_lan.command`.
 
-**Running:** Python >=3.10. On Windows, run `start_windows.bat`, save first-run `admin` password, open `http://localhost:8765`. For trusted LAN access only, run `start_windows_lan.bat` and share `http://<LAN-IP>:8765`; set firewall to private network. The runtime creates `data/annotations.db` and `data/media/` (back up both). Do not expose plain HTTP publicly.
+**Running:** Python >=3.10. On Windows, run `start_windows.bat`; on Linux, `./start_local.sh`; on macOS, `./start_local.sh` or `start_macos.command`. Save the first-run `admin` password and open `http://localhost:8765`. For trusted LAN access only, use the corresponding `start_windows_lan.bat`, `./start_lan.sh`, or `start_macos_lan.command` and share `http://<LAN-IP>:8765`; restrict firewall access to the trusted network. The runtime creates `data/annotations.db` and `data/media/` (back up the whole `data/` folder). Do not expose plain HTTP publicly.
 
 **Admin UI:** upload actual audio; create sample IDs, transcript, optional style/reference/private metadata; construct Pairwise items; set pilot/main; create annotator users; inspect QC; export JSONL/CSV. Bulk import is through a JSON manifest (not direct CSV/JSONL import). Import sample requires `sample_id`, `target_text`, `audio_url`; pair requires `pair_id`, `sample_a_id`, `sample_b_id`. Audio URL may be an uploaded `/media/` resource or HTTPS URL. Only use shared style/reference when aligned.
 

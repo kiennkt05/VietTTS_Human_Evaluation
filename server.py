@@ -13,7 +13,6 @@ import hashlib
 import hmac
 import io
 import json
-import mimetypes
 import os
 import re
 import secrets
@@ -54,6 +53,9 @@ PAIR_EXPORT_COLUMNS = ['pair_id','sample_a_id','sample_b_id','username','workflo
 USER_RE = re.compile(r'^[a-zA-Z0-9._-]{3,40}$')
 ID_RE = re.compile(r'^[A-Za-z0-9._:-]{1,100}$')
 AUDIO_EXT = {'.mp3', '.wav', '.ogg', '.m4a', '.aac', '.webm', '.flac', '.opus'}
+AUDIO_MIME = {'.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg',
+              '.m4a': 'audio/mp4', '.aac': 'audio/aac', '.webm': 'audio/webm',
+              '.flac': 'audio/flac', '.opus': 'audio/ogg'}
 _SECRET = None
 
 
@@ -639,7 +641,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def send_media(self,src):
         size=src.stat().st_size
-        mime=mimetypes.guess_type(src.name)[0] or 'application/octet-stream'
+        mime=AUDIO_MIME[src.suffix.lower()]
         start=0;end=size-1;status=200
         rng=self.headers.get('Range','')
         if rng:

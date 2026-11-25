@@ -116,7 +116,9 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(status, 400)
         audio_url = self.audio_url()
         self.assertEqual(self.request(audio_url)[0], 401)
-        self.assertEqual(self.request(audio_url, cookie=self.admin)[0], 200)
+        status, _, headers = self.request(audio_url, cookie=self.admin)
+        self.assertEqual(status, 200)
+        self.assertEqual(headers['Content-Type'], 'audio/wav')
         for payload in (
             {'sample_id': None, 'target_text': 'Text', 'audio_url': audio_url},
             {'sample_id': 'x', 'target_text': None, 'audio_url': audio_url},

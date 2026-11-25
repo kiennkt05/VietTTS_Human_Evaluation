@@ -1,0 +1,40 @@
+name: Cross-platform checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+        python-version: ['3.10', '3.13']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Workflow checks
+        run: python -B -m unittest discover -s tests -v
+      - name: POSIX launcher checks
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          sh -n start_local.sh start_lan.sh start_macos.command start_macos_lan.command
+          ./start_local.sh --help
+          ./start_lan.sh --help
+          ./start_macos.command --help
+          ./start_macos_lan.command --help
+      - name: Windows launcher check
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          .\start_windows.bat --help
+          .\start_windows_local_only.bat --help
+          .\start_windows_lan.bat --help

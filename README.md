@@ -4,17 +4,22 @@ An operational web app for **real human annotation of Vietnamese TTS**, replacin
 
 The app uses Python's standard library only (no pip dependencies), an SQLite database, locally uploaded audio files, account-based access, and a shared web URL for annotators.
 
-## Quick start — Windows
+## Quick start — Windows, Linux, macOS
 
-1. Extract the ZIP into a writable folder.
-2. Have **Python 3.10 or later** installed (`python --version`).
-3. Double-click **`start_windows.bat`** to run the web app on this computer. The first launch prints an automatically generated **admin password**, visible only on that first run. Save it.
-4. Open **http://localhost:8765** in Chrome or Edge and sign in as `admin`.
-5. For colleagues on other PCs, close the local server and run **`start_windows_lan.bat`**. This binds to your trusted LAN (`0.0.0.0`). If colleagues access it from other computers on the *same trusted network*, find your PC's LAN IPv4 using `ipconfig`, then share `http://YOUR_LAN_IP:8765`. If Windows Firewall prompts you, allow **Private networks only**. Do **not** expose this HTTP service to the public internet.
+1. Clone or extract this repository into a writable folder and install **Python 3.10 or later**. Check with `python --version` on Windows or `python3 --version` on Linux/macOS. No pip install is needed.
+2. Start the server on this computer:
 
-To start local-only instead, run `python server.py --host 127.0.0.1 --port 8765`.
+   | OS | Local only | Trusted LAN |
+   | --- | --- | --- |
+   | Windows | Double-click `start_windows.bat` (or `start_windows_local_only.bat`) | Double-click `start_windows_lan.bat` |
+   | Linux | `./start_local.sh` | `./start_lan.sh` |
+   | macOS | Double-click `start_macos.command` or run `./start_local.sh` | Double-click `start_macos_lan.command` or run `./start_lan.sh` |
 
-**Set an admin password in advance (optional):** from PowerShell, before first launch, run `$env:TTS_ADMIN_PASSWORD="your-strong-password"` then `python server.py`. The password is saved as a salted PBKDF2 hash, not in plaintext. Subsequent launches reuse the database and don't print the password.
+   On Linux/macOS, `sh start_local.sh` and `sh start_lan.sh` also work if executable permissions were lost when extracting a ZIP. On Windows, the scripts find either `python` or the `py -3` launcher. Each launcher starts in the repository folder. To use another port from a terminal, append `--port PORT` to the command.
+3. On first launch, save the automatically generated **admin password** printed in the terminal. Open **http://localhost:8765** in a browser and sign in as `admin`. Subsequent launches reuse the same database and do not print the password.
+4. For other annotators on the same trusted network, stop the local-only server and use the LAN launcher. Find the host machine's LAN IPv4 address (for example, with `ipconfig` on Windows or network settings on Linux/macOS) and share `http://YOUR_LAN_IP:8765`. Allow the port through the host firewall only for the trusted network. Do **not** expose this plain HTTP service to the public internet.
+
+**Set an admin password in advance (optional):** before the first launch, set `TTS_ADMIN_PASSWORD` to at least eight characters in the same terminal. In PowerShell: `$env:TTS_ADMIN_PASSWORD="your-strong-password"`; in a POSIX shell: `export TTS_ADMIN_PASSWORD='your-strong-password'`. Then run the appropriate launcher. The password is saved as a salted PBKDF2 hash, not in plaintext.
 
 ## Operator workflow
 
@@ -81,7 +86,7 @@ Audio upload accepts `.wav`, `.mp3`, `.m4a`, `.ogg`, `.webm`, `.flac`, `.aac`, `
 
 ## Software checks
 
-Run `python -B -m unittest discover -s tests -v` from this folder. The checks use a temporary database and audio fixture; they do not write labels to the project `data/` directory. They cover input validation, draft resume, independent statuses, randomized-display normalization, phase warnings, QC, access restrictions, and exports. A real annotator pilot remains necessary to evaluate the research workflow and rating reliability.
+Run `python -B -m unittest discover -s tests -v` on Windows or `python3 -B -m unittest discover -s tests -v` on Linux/macOS from this folder. The checks use a temporary database and audio fixture; they do not write labels to the project `data/` directory. They cover input validation, draft resume, independent statuses, randomized-display normalization, phase warnings, QC, access restrictions, and exports. GitHub Actions runs these checks on Windows, Linux, and macOS with supported Python versions. A real annotator pilot remains necessary to evaluate the research workflow and rating reliability.
 
 ## Security and deployment limitations
 
@@ -95,4 +100,4 @@ The app provides password hashing, HTTP-only session cookies, role-restricted en
 - **Audio won't play:** check uploaded file/codec and browser support; if objectively unplayable, select **Invalid** and describe it.
 - **Forgot admin password:** this version intentionally has no in-browser reset. Preserve the original first-run password in a password manager. Resetting users by editing the SQLite database directly is unsupported and error-prone.
 - **Multiple computers:** all annotators must access the *same running server*, not independent local copies of the folder; otherwise independent SQLite files won't aggregate.
-- **Closing the terminal:** shuts down the app. Restart with the `.bat` file to continue; existing data is preserved.
+- **Closing the terminal:** shuts down the app. Restart with the appropriate launcher to continue; existing data is preserved.
