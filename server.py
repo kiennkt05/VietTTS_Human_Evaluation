@@ -36,20 +36,14 @@ LOCK = threading.RLock()
 MAX_UPLOAD = 60 * 1024 * 1024
 MAX_JSON = 4 * 1024 * 1024
 PHASES = {'pilot', 'main'}
-WORKFLOWS = {'single', 'pair'}
+WORKFLOWS = {'single'}
 ACCURACY = {'no_error', 'has_error', 'unsure'}
 ERRORS = {'omission', 'insertion', 'substitution', 'repetition'}
-REASONS = {'intonation', 'pacing', 'pronunciation', 'expressiveness', 'audio_quality', 'other'}
-SCORES = ['pronunciation', 'intonation', 'pacing', 'expressiveness', 'audio_quality', 'naturalness']
+SCORES = ['pronunciation', 'intonation', 'pacing', 'audio_quality', 'naturalness']
 CONFIDENCE = {'low', 'medium', 'high'}
 SINGLE_EXPORT_COLUMNS = ['sample_id','username','workflow','phase','status','status_reason',
                          'text_accuracy','error_types',*SCORES,'confidence','note',
                          'started_at','submitted_at','duration_seconds']
-PAIR_EXPORT_COLUMNS = ['pair_id','sample_a_id','sample_b_id','username','workflow','phase',
-                       'status','status_reason','display_swapped','text_accuracy_a',
-                       'text_accuracy_b','preference','preference_display',
-                       'preference_reasons','confidence','note','started_at','submitted_at',
-                       'duration_seconds']
 USER_RE = re.compile(r'^[a-zA-Z0-9._-]{3,40}$')
 ID_RE = re.compile(r'^[A-Za-z0-9._:-]{1,100}$')
 AUDIO_EXT = {'.mp3', '.wav', '.ogg', '.m4a', '.aac', '.webm', '.flac', '.opus'}
@@ -106,7 +100,7 @@ def setup():
     global _SECRET
     secret_file = DATA / '.server_secret'
     if DBPATH.is_file() and not secret_file.is_file():
-        raise SystemExit('Existing annotations.db requires data/.server_secret. Restore both from the same backup to preserve Pairwise display mapping and open drafts.')
+        raise SystemExit('Existing annotations.db requires data/.server_secret. Restore both from the same backup to preserve open task tokens.')
     DATA.mkdir(parents=True, exist_ok=True)
     MEDIA.mkdir(parents=True, exist_ok=True)
     with db() as c:
@@ -124,11 +118,6 @@ def setup():
           style_instruction TEXT NOT NULL DEFAULT '', reference_audio_url TEXT NOT NULL DEFAULT '',
           phase TEXT NOT NULL CHECK(phase IN ('pilot','main')), private_metadata TEXT NOT NULL DEFAULT '{}',
           created_at TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS pairs (
-          pair_id TEXT PRIMARY KEY, sample_a_id TEXT NOT NULL REFERENCES samples(sample_id),
-          sample_b_id TEXT NOT NULL REFERENCES samples(sample_id), phase TEXT NOT NULL CHECK(phase IN ('pilot','main')),
-          created_at TEXT NOT NULL, CHECK(sample_a_id<>sample_b_id)
         );
         CREATE TABLE IF NOT EXISTS drafts (
           user_id INTEGER NOT NULL REFERENCES users(id), workflow TEXT NOT NULL,
@@ -266,28 +255,6 @@ def looks_like_audio(content,ext):
     return False
 
 
-def normalize_pair(o,c):
-    if not isinstance(o,dict): fail('Mỗi pair phải là object')
-    pid = str(o.get('pair_id','')).strip()
-    a = str(o.get('sample_a_id','')).strip()
-    b = str(o.get('sample_b_id','')).strip()
-    phase = str(o.get('phase','main')).strip()
-    if not ID_RE.fullmatch(pid): fail('pair_id không hợp lệ.')
-    if phase not in PHASES: fail('phase phải là pilot hoặc main')
-    if a==b: fail('Một pair phải chứa hai sample khác nhau.')
-    sa=c.execute('SELECT target_text,style_instruction FROM samples WHERE sample_id=?',(a,)).fetchone()
-    sb=c.execute('SELECT target_text,style_instruction FROM samples WHERE sample_id=?',(b,)).fetchone()
-    if not sa or not sb: fail('Pair '+pid+' tham chiếu sample không tồn tại.')
-    if ' '.join(sa['target_text'].split())!=' '.join(sb['target_text'].split()):
-        fail('Pair '+pid+' yêu cầu hai audio cùng văn bản mục tiêu.')
-    return (pid,a,b,phase,utcnow())
-
-
-def swapped_for(user_id,pair_id):
-    msg=f'{user_id}:{pair_id}'.encode('utf-8')
-    return bool(hmac.new(_SECRET,msg,hashlib.sha256).digest()[0]&1)
-
-
 def task_token(user_id,workflow,item_id):
     msg=f'task:{user_id}:{workflow}:{item_id}'.encode('utf-8')
     return hmac.new(_SECRET,msg,hashlib.sha256).hexdigest()
@@ -304,8 +271,9 @@ def draft_item_for_token(c,user_id,workflow,token):
 
 def queue_next(user, workflow, phase):
     if user['role']!='evaluator': fail('Quản trị viên không phải tài khoản gắn nhãn.',403)
-    if workflow not in WORKFLOWS or phase not in PHASES: fail('Workflow/phase không hợp lệ.')
-    table, column = ('samples','sample_id') if workflow=='single' else ('pairs','pair_id')
+    if workflow not in WORKFLOWS: fail('Hiện chỉ hỗ trợ đánh giá Single Audio.',409)
+    if phase not in PHASES: fail('phase không hợp lệ.')
+    table, column = 'samples','sample_id'
     with LOCK, db() as c:
         target=get_target(c)
         # Resume a previously opened unfinished draft first.
@@ -330,25 +298,9 @@ def queue_next(user, workflow, phase):
               VALUES(?,?,?,'{}',?,?)''',(user['id'],workflow,item_id,now,now))
         draft=c.execute('SELECT content,started_at,updated_at FROM drafts WHERE user_id=? AND workflow=? AND item_id=?',
                         (user['id'],workflow,item_id)).fetchone()
-        if workflow=='single':
-            item=dict(c.execute('''SELECT sample_id,target_text,audio_url,style_instruction,reference_audio_url,phase
+        item=dict(c.execute('''SELECT sample_id,target_text,audio_url,style_instruction,reference_audio_url,phase
                               FROM samples WHERE sample_id=?''',(item_id,)).fetchone())
-            item.pop('sample_id')
-        else:
-            pair=c.execute('SELECT * FROM pairs WHERE pair_id=?',(item_id,)).fetchone()
-            aa=c.execute('''SELECT sample_id,target_text,audio_url,style_instruction,reference_audio_url FROM samples WHERE sample_id=?''',
-                         (pair['sample_a_id'],)).fetchone()
-            bb=c.execute('''SELECT sample_id,target_text,audio_url,style_instruction,reference_audio_url FROM samples WHERE sample_id=?''',
-                         (pair['sample_b_id'],)).fetchone()
-            a=dict(aa); b=dict(bb)
-            swap=swapped_for(user['id'],item_id)
-            if swap: a,b=b,a
-            item={'target_text':aa['target_text'],
-                  'style_instruction':aa['style_instruction'] if aa['style_instruction']==bb['style_instruction'] else '',
-                  'reference_audio_url':aa['reference_audio_url'] if aa['reference_audio_url']==bb['reference_audio_url'] else '',
-                  'phase':phase,
-                  'display_a':{'audio_url':a['audio_url']},'display_b':{'audio_url':b['audio_url']}}
-            # Do not return canonical IDs or swap metadata to evaluator (only operator exports).
+        item.pop('sample_id')
         return {'item':item,'task_token':task_token(user['id'],workflow,item_id),
                 'draft':json.loads(draft['content']),
                 'progress':{'completed_by_you':count_user,'total_items':item_total,'target_per_item':target}}
@@ -366,41 +318,25 @@ def normalize_submission(user,payload):
     if len(status_reason)>2000: fail('Lý do quá dài.')
     labels={}
     if status=='completed':
+        if 'expressiveness' in payload: fail('Single Audio hiện chỉ có năm điểm; không nhận expressiveness.')
         confidence = payload.get('confidence')
         if confidence is not None and confidence!='' and (not isinstance(confidence,str) or confidence not in CONFIDENCE):
             fail('confidence phải là low, medium, high hoặc để trống')
         labels['confidence'] = confidence or None
         labels['note']=str(payload.get('note') or '').strip()[:4000]
-        if workflow=='single':
-            acc=payload.get('text_accuracy')
-            if not isinstance(acc,str) or acc not in ACCURACY: fail('Single: cần chọn text accuracy.')
-            errors=payload.get('error_types',[])
-            if not isinstance(errors,list) or any(not isinstance(x,str) or x not in ERRORS for x in errors): fail('Loại lỗi Single không hợp lệ.')
-            if acc=='has_error' and not errors: fail('Single: has_error phải chọn ít nhất một loại lỗi.')
-            if acc!='has_error' and errors: fail('Single: không chọn loại lỗi khi no_error/unsure.')
-            labels['text_accuracy']=acc
-            labels['error_types']=list(dict.fromkeys(errors))
-            for score in SCORES:
-                val=payload.get(score)
-                if type(val) is not int or not (1<=val<=5):
-                    fail('Single: '+score+' phải là số nguyên từ 1 đến 5.')
-                labels[score]=val
-        else:
-            aa=payload.get('text_accuracy_a'); bb=payload.get('text_accuracy_b')
-            if not isinstance(aa,str) or aa not in ACCURACY or not isinstance(bb,str) or bb not in ACCURACY:
-                fail('Pairwise: phải chấm accuracy riêng cho cả Audio A và B.')
-            value=payload.get('preference_display')
-            if type(value) is not int or value not in {-2,-1,0,1,2}:
-                fail('Pairwise: cần chọn một trong năm mức preference.')
-            reasons=payload.get('preference_reasons',[])
-            if not isinstance(reasons,list) or any(not isinstance(r,str) or r not in REASONS for r in reasons):
-                fail('Preference reasons không hợp lệ.')
-            swap=swapped_for(user['id'],item_id)
-            labels['text_accuracy_a']=bb if swap else aa
-            labels['text_accuracy_b']=aa if swap else bb
-            labels['preference']=-value if swap else value
-            labels['preference_display']=value
-            labels['preference_reasons']=list(dict.fromkeys(reasons))
+        acc=payload.get('text_accuracy')
+        if not isinstance(acc,str) or acc not in ACCURACY: fail('Single: cần chọn text accuracy.')
+        errors=payload.get('error_types',[])
+        if not isinstance(errors,list) or any(not isinstance(x,str) or x not in ERRORS for x in errors): fail('Loại lỗi Single không hợp lệ.')
+        if acc=='has_error' and not errors: fail('Single: has_error phải chọn ít nhất một loại lỗi.')
+        if acc!='has_error' and errors: fail('Single: không chọn loại lỗi khi no_error/unsure.')
+        labels['text_accuracy']=acc
+        labels['error_types']=list(dict.fromkeys(errors))
+        for score in SCORES:
+            val=payload.get(score)
+            if type(val) is not int or not (1<=val<=5):
+                fail('Single: '+score+' phải là số nguyên từ 1 đến 5.')
+            labels[score]=val
     else:
         confidence=payload.get('confidence')
         if confidence is not None and confidence!='' and (not isinstance(confidence,str) or confidence not in CONFIDENCE):
@@ -409,106 +345,59 @@ def normalize_submission(user,payload):
     return workflow,item_id,status,status_reason,labels
 
 
-def all_status(c,workflow,phase):
-    table,key=('samples','sample_id') if workflow=='single' else ('pairs','pair_id')
-    r=c.execute(f'''SELECT i.{key} AS id,
+def all_status(c,phase):
+    rows=c.execute('''SELECT i.sample_id AS id,
       SUM(CASE WHEN s.status='completed' THEN 1 ELSE 0 END) AS done,
       SUM(CASE WHEN s.status='invalid' THEN 1 ELSE 0 END) AS invalid,
       SUM(CASE WHEN s.status='skipped' THEN 1 ELSE 0 END) AS skipped
-      FROM {table} i LEFT JOIN submissions s ON s.workflow=? AND s.item_id=i.{key}
-      WHERE i.phase=? GROUP BY i.{key} ORDER BY i.created_at,i.{key}''',(workflow,phase)).fetchall()
-    return [{**dict(x),**{'done':x['done'] or 0,'invalid':x['invalid'] or 0,'skipped':x['skipped'] or 0}} for x in r]
+      FROM samples i LEFT JOIN submissions s ON s.workflow='single' AND s.item_id=i.sample_id
+      WHERE i.phase=? GROUP BY i.sample_id ORDER BY i.created_at,i.sample_id''',(phase,)).fetchall()
+    return [{**dict(x),'done':x['done'] or 0,'invalid':x['invalid'] or 0,
+             'skipped':x['skipped'] or 0} for x in rows]
 
 
 def aggregate(c,phase):
     target=get_target(c)
-    out={'phase':phase,'target_annotations':target,'single':{},'pair':{}}
-    for workflow in ('single','pair'):
-        states=all_status(c,workflow,phase)
-        r=c.execute('''SELECT s.status,s.labels_json,s.item_id,s.user_id,s.display_swapped
-                        FROM submissions s WHERE s.workflow=? AND s.phase=?''',(workflow,phase)).fetchall()
-        completed=[json.loads(x['labels_json']) for x in r if x['status']=='completed']
-        counts={k:sum(x['status']==k for x in r) for k in ['completed','invalid','skipped']}
-        data={'items':len(states),'items_at_target':sum(x['done']>=target for x in states),
-              'needs_labels':sum(max(0,target-x['done']) for x in states),
-              'status_counts':counts,'completed_items':sum(x['done']>=target for x in states)}
-        data['total_items']=len(states)
-        data['items']=states
-        if workflow=='single':
-            data['score_means']={score:round(sum(x[score] for x in completed)/len(completed),3) if completed else None for score in SCORES}
-            data['text_accuracy']={k:sum(x['text_accuracy']==k for x in completed) for k in ACCURACY}
-            data['error_types']={k:sum(k in x['error_types'] for x in completed) for k in sorted(ERRORS)}
-            data['score_distributions']={score:{str(v):sum(x[score]==v for x in completed) for v in [1,2,3,4,5]} for score in SCORES}
-            grouped={}
-            for x in r:
-                if x['status']=='completed':
-                    grouped.setdefault(x['item_id'],[]).append(json.loads(x['labels_json']))
-            data['text_accuracy_full_agreement_at_3']=sum(len(v)>=3 and len({t['text_accuracy'] for t in v})==1 for v in grouped.values())
-            data['items_with_3_labels']=sum(len(v)>=3 for v in grouped.values())
-            data['score_average_spread']={score:round(sum(max(t[score] for t in v)-min(t[score] for t in v) for v in grouped.values() if len(v)>=2)/sum(len(v)>=2 for v in grouped.values()),3) if any(len(v)>=2 for v in grouped.values()) else None for score in SCORES}
-        else:
-            data['preferences']={str(k):sum(x['preference']==k for x in completed) for k in [2,1,0,-1,-2]}
-            data['tie_count']=data['preferences']['0']
-            grouped={}
-            for x in r:
-                if x['status']=='completed':
-                    grouped.setdefault(x['item_id'],[]).append(json.loads(x['labels_json'])['preference'])
-            data['full_agreement_at_3']=sum(len(v)>=3 and len(set(v))==1 for v in grouped.values())
-            data['item_preference_counts']={p:{str(i):v.count(i) for i in [2,1,0,-1,-2]} for p,v in grouped.items()}
-            data['direction_counts']={'A':sum(x['preference']>0 for x in completed),
-                                      'B':sum(x['preference']<0 for x in completed),
-                                      'Tie':sum(x['preference']==0 for x in completed)}
-            data['direction_rates']={k:round(v/len(completed),3) if completed else None
-                                     for k,v in data['direction_counts'].items()}
-            data['text_accuracy_a']={k:sum(x['text_accuracy_a']==k for x in completed) for k in sorted(ACCURACY)}
-            data['text_accuracy_b']={k:sum(x['text_accuracy_b']==k for x in completed) for k in sorted(ACCURACY)}
-            data['display_direction_counts']={'A':sum(x['preference_display']>0 for x in completed),
-                                              'B':sum(x['preference_display']<0 for x in completed),
-                                              'Tie':sum(x['preference_display']==0 for x in completed)}
-            data['position_by_swap']={}
-            for swapped in (0,1):
-                subset=[json.loads(x['labels_json']) for x in r if x['status']=='completed' and x['display_swapped']==swapped]
-                data['position_by_swap'][str(swapped)]={'n':len(subset),
-                    'display_a_wins':sum(x['preference_display']>0 for x in subset),
-                    'display_b_wins':sum(x['preference_display']<0 for x in subset),
-                    'ties':sum(x['preference_display']==0 for x in subset)}
-            accuracy_grouped={}
-            for x in r:
-                if x['status']=='completed':
-                    accuracy_grouped.setdefault(x['item_id'],[]).append(json.loads(x['labels_json']))
-            data['items_with_3_labels']=sum(len(v)>=3 for v in accuracy_grouped.values())
-            data['text_accuracy_a_full_agreement_at_3']=sum(len(v)>=3 and len({t['text_accuracy_a'] for t in v})==1 for v in accuracy_grouped.values())
-            data['text_accuracy_b_full_agreement_at_3']=sum(len(v)>=3 and len({t['text_accuracy_b'] for t in v})==1 for v in accuracy_grouped.values())
-            data['phase_mismatch_pairs']=[x['pair_id'] for x in c.execute('''SELECT p.pair_id FROM pairs p
-                JOIN samples a ON a.sample_id=p.sample_a_id JOIN samples b ON b.sample_id=p.sample_b_id
-                WHERE p.phase=? AND (a.phase<>p.phase OR b.phase<>p.phase) ORDER BY p.pair_id''',(phase,))]
-            decisive=[abs(x['preference']) for x in completed if x['preference']]
-            data['mean_non_tie_strength']=round(sum(decisive)/len(decisive),3) if decisive else None
-            data['direction_full_agreement_at_3']=sum(len(v)>=3 and len({(t>0)-(t<0) for t in v})==1 for v in grouped.values())
-        out[workflow]=data
-    return out
+    states=all_status(c,phase)
+    rows=c.execute('''SELECT status,labels_json,item_id FROM submissions
+                      WHERE workflow='single' AND phase=?''',(phase,)).fetchall()
+    completed=[json.loads(x['labels_json']) for x in rows if x['status']=='completed']
+    grouped={}
+    for x in rows:
+        if x['status']=='completed':
+            grouped.setdefault(x['item_id'],[]).append(json.loads(x['labels_json']))
+    repeated=[v for v in grouped.values() if len(v)>=2]
+    data={
+        'total_items':len(states),
+        'items':states,
+        'items_at_target':sum(x['done']>=target for x in states),
+        'completed_items':sum(x['done']>=target for x in states),
+        'needs_labels':sum(max(0,target-x['done']) for x in states),
+        'status_counts':{k:sum(x['status']==k for x in rows) for k in ('completed','invalid','skipped')},
+        'score_means':{s:round(sum(x[s] for x in completed)/len(completed),3) if completed else None for s in SCORES},
+        'score_distributions':{s:{str(v):sum(x[s]==v for x in completed) for v in range(1,6)} for s in SCORES},
+        'text_accuracy':{k:sum(x['text_accuracy']==k for x in completed) for k in ACCURACY},
+        'error_types':{k:sum(k in x['error_types'] for x in completed) for k in sorted(ERRORS)},
+        'items_with_3_labels':sum(len(v)>=3 for v in grouped.values()),
+        'text_accuracy_full_agreement_at_3':sum(len(v)>=3 and len({t['text_accuracy'] for t in v})==1 for v in grouped.values()),
+        'score_average_spread':{s:round(sum(max(t[s] for t in v)-min(t[s] for t in v) for v in repeated)/len(repeated),3) if repeated else None for s in SCORES},
+    }
+    return {'phase':phase,'target_annotations':target,'single':data}
 
 
 def export_rows(c,kind):
-    if kind in ('samples','pairs'):
-        return [dict(x) for x in c.execute('SELECT * FROM '+kind+' ORDER BY created_at')]
-    workflow='single' if kind.startswith('single') else 'pair'
+    if kind=='samples':
+        return [dict(x) for x in c.execute('SELECT * FROM samples ORDER BY created_at')]
     result=[]
     for x in c.execute('''SELECT s.*,u.username FROM submissions s JOIN users u ON u.id=s.user_id
-                            WHERE s.workflow=? ORDER BY s.phase,s.item_id,s.submitted_at''',(workflow,)):
+                          WHERE s.workflow='single' ORDER BY s.phase,s.item_id,s.submitted_at'''):
         d=dict(x)
         labels=json.loads(d.pop('labels_json'))
         d.pop('user_id',None)
         d.pop('id',None)
-        d['status']=d['status']
-        d['display_swapped']=bool(d['display_swapped']) if workflow=='pair' else None
-        d[('sample_id' if workflow=='single' else 'pair_id')]=d.pop('item_id')
+        d.pop('display_swapped',None)
+        d['sample_id']=d.pop('item_id')
         d.update(labels)
-        if workflow=='pair':
-            p=c.execute('SELECT sample_a_id,sample_b_id FROM pairs WHERE pair_id=?',(d['pair_id'],)).fetchone()
-            d['sample_a_id']=p['sample_a_id'];d['sample_b_id']=p['sample_b_id']
-        else:
-            d.pop('display_swapped',None)
         result.append(d)
     return result
 
@@ -587,9 +476,8 @@ class Handler(BaseHTTPRequestHandler):
             auth(self,True)
             with db() as c:
                 samples=[dict(x) for x in c.execute('SELECT * FROM samples ORDER BY created_at')]
-                pairs=[dict(x) for x in c.execute('SELECT * FROM pairs ORDER BY created_at')]
                 for x in samples: x['private_metadata']=json.loads(x['private_metadata'])
-                self.send_json({'samples':samples,'pairs':pairs,'target_annotations':get_target(c)})
+                self.send_json({'samples':samples,'target_annotations':get_target(c)})
             return
         if path=='/api/admin/users':
             auth(self,True)
@@ -610,23 +498,23 @@ class Handler(BaseHTTPRequestHandler):
             with db() as c:
                 rows=[]
                 for x in c.execute('''SELECT s.*,u.username FROM submissions s JOIN users u ON u.id=s.user_id
-                                      WHERE s.phase=? ORDER BY s.submitted_at DESC''',(phase,)):
+                                      WHERE s.phase=? AND s.workflow='single' ORDER BY s.submitted_at DESC''',(phase,)):
                     item=dict(x);item.pop('user_id');item['labels']=json.loads(item.pop('labels_json'));rows.append(item)
             self.send_json({'submissions':rows});return
         if path=='/api/admin/export':
             auth(self,True)
             kind=qs.get('kind',[''])[0]
-            if kind not in {'samples','pairs','single_annotations','pair_annotations','single_annotations_csv','pair_annotations_csv'}:
+            if kind not in {'samples','single_annotations','single_annotations_csv'}:
                 fail('Export không hợp lệ.')
             with db() as c:
                 rawkind=kind.removesuffix('_csv')
                 rows=export_rows(c,rawkind)
-            if kind in {'samples','pairs'}:
+            if kind=='samples':
                 for r in rows:
                     if 'private_metadata' in r: r['private_metadata']=json.loads(r['private_metadata'])
             if kind.endswith('_csv'):
                 buf=io.StringIO()
-                keys=SINGLE_EXPORT_COLUMNS if kind.startswith('single') else PAIR_EXPORT_COLUMNS
+                keys=SINGLE_EXPORT_COLUMNS
                 w=csv.DictWriter(buf,fieldnames=keys,extrasaction='ignore');w.writeheader()
                 for row in rows: w.writerow({k:json_dumps(v) if isinstance(v,(list,dict)) else v for k,v in row.items()})
                 data=('\ufeff'+buf.getvalue()).encode('utf-8')
@@ -698,10 +586,11 @@ class Handler(BaseHTTPRequestHandler):
             if user['role']!='evaluator': fail('Chỉ annotator có thể lưu bản nháp.',403)
             d=body_json(self)
             wf=d.get('workflow')
+            if wf not in WORKFLOWS: fail('Hiện chỉ hỗ trợ đánh giá Single Audio.',409)
             if not isinstance(wf,str) or wf not in WORKFLOWS: fail('Draft không hợp lệ.')
             content=d.get('content',{})
             if not isinstance(content,dict) or len(json_dumps(content))>20000: fail('Draft content không hợp lệ.')
-            table,key=('samples','sample_id') if wf=='single' else ('pairs','pair_id')
+            table,key='samples','sample_id'
             with LOCK, db() as c:
                 item_id=draft_item_for_token(c,user['id'],wf,d.get('item_token'))
                 exists=c.execute(f'SELECT 1 FROM {table} WHERE {key}=?',(item_id,)).fetchone()
@@ -719,11 +608,12 @@ class Handler(BaseHTTPRequestHandler):
             if user['role']!='evaluator': fail('Chỉ annotator có thể gửi phiếu.',403)
             d=body_json(self)
             wf=d.get('workflow')
+            if wf not in WORKFLOWS: fail('Hiện chỉ hỗ trợ đánh giá Single Audio.',409)
             if not isinstance(wf,str) or wf not in WORKFLOWS: fail('Workflow không hợp lệ.')
             with LOCK,db() as c:
                 item_id=draft_item_for_token(c,user['id'],wf,d.get('item_token'))
                 wf,item_id,status,reason,labels=normalize_submission(user,{**d,'item_id':item_id})
-                table,key=('samples','sample_id') if wf=='single' else ('pairs','pair_id')
+                table,key='samples','sample_id'
                 row=c.execute(f'SELECT phase FROM {table} WHERE {key}=?',(item_id,)).fetchone()
                 if not row: fail('Item không tồn tại.',404)
                 old=c.execute('SELECT id FROM submissions WHERE user_id=? AND workflow=? AND item_id=?',
@@ -741,7 +631,7 @@ class Handler(BaseHTTPRequestHandler):
                     t1=datetime.fromisoformat(started);t2=datetime.fromisoformat(submitted)
                     duration=max(0,int((t2-t1).total_seconds()))
                 except Exception: duration=0
-                swap=int(swapped_for(user['id'],item_id)) if wf=='pair' else 0
+                swap=0
                 c.execute('''INSERT INTO submissions(user_id,workflow,item_id,phase,status,labels_json,display_swapped,
                       status_reason,started_at,submitted_at,duration_seconds) VALUES(?,?,?,?,?,?,?,?,?,?,?)''',
                       (user['id'],wf,item_id,row['phase'],status,json_dumps(labels),swap,reason,started,submitted,duration))
@@ -784,39 +674,21 @@ class Handler(BaseHTTPRequestHandler):
                              phase,private_metadata,created_at) VALUES(?,?,?,?,?,?,?,?)''', fields)
             self.send_json({'ok':True,'sample_id':fields[0]},201);return
         if path=='/api/admin/pair':
-            auth(self,True);d=body_json(self)
-            with db() as c:
-                fields=normalize_pair(d,c)
-                c.execute('INSERT INTO pairs(pair_id,sample_a_id,sample_b_id,phase,created_at) VALUES(?,?,?,?,?)',fields)
-            with db() as c:
-                aa=c.execute('SELECT style_instruction,reference_audio_url,phase FROM samples WHERE sample_id=?',(fields[1],)).fetchone()
-                bb=c.execute('SELECT style_instruction,reference_audio_url,phase FROM samples WHERE sample_id=?',(fields[2],)).fetchone()
-            warnings=[]
-            if aa['style_instruction']!=bb['style_instruction']: warnings.append('Hai sample có style_instruction khác nhau; evaluator sẽ không nhận style chung.')
-            if aa['reference_audio_url']!=bb['reference_audio_url']: warnings.append('Hai sample có reference khác nhau; evaluator sẽ không nhận audio reference chung.')
-            if aa['phase']!=fields[3] or bb['phase']!=fields[3]: warnings.append('Phase của pair khác phase ít nhất một sample; cần kiểm tra tách Pilot/Main trước khi thu thập.')
-            self.send_json({'ok':True,'pair_id':fields[0],'warnings':warnings},201);return
+            auth(self,True)
+            fail('Hiện chỉ hỗ trợ đánh giá Single Audio; không tạo Pairwise mới.',409)
         if path=='/api/admin/import':
             auth(self,True);d=body_json(self)
-            samples=d.get('samples',[]);pairs=d.get('pairs',[])
-            if not isinstance(samples,list) or not isinstance(pairs,list): fail('samples/pairs phải là hai danh sách.')
-            if not samples and not pairs: fail('Manifest không có samples hoặc pairs.')
-            if len(samples)+len(pairs)>10000: fail('Batch quá lớn, chia nhỏ dữ liệu.')
-            warnings=[]
+            samples=d.get('samples',[])
+            if not isinstance(samples,list): fail('samples phải là danh sách.')
+            if 'pairs' in d: fail('Hiện chỉ hỗ trợ Single Audio; manifest không nhận pairs.',409)
+            if not samples: fail('Manifest không có samples.')
+            if len(samples)>10000: fail('Batch quá lớn, chia nhỏ dữ liệu.')
             with LOCK,db() as c:
                 for raw in samples:
                     fields=normalize_sample(raw)
                     c.execute('''INSERT INTO samples(sample_id,target_text,audio_url,style_instruction,reference_audio_url,
                                     phase,private_metadata,created_at) VALUES(?,?,?,?,?,?,?,?)''',fields)
-                for raw in pairs:
-                    fields=normalize_pair(raw,c)
-                    c.execute('INSERT INTO pairs(pair_id,sample_a_id,sample_b_id,phase,created_at) VALUES(?,?,?,?,?)',fields)
-                    phases=c.execute('SELECT a.phase AS a_phase,b.phase AS b_phase FROM samples a,samples b WHERE a.sample_id=? AND b.sample_id=?',
-                                     (fields[1],fields[2])).fetchone()
-                    if phases['a_phase']!=fields[3] or phases['b_phase']!=fields[3]:
-                        warnings.append('Pair '+fields[0]+' có phase khác ít nhất một sample; kiểm tra Pilot/Main.')
-            self.send_json({'ok':True,'imported_samples':len(samples),'imported_pairs':len(pairs),
-                            'warnings':warnings},201);return
+            self.send_json({'ok':True,'imported_samples':len(samples)},201);return
         fail('Không tìm thấy đường dẫn.',404)
 
 
