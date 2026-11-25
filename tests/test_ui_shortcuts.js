@@ -7,7 +7,7 @@ const vm = require('node:vm');
 const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 const script = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
 assert.ok(script, 'inline app script');
-const boot = script.indexOf("document.addEventListener('keydown',handleEvaluatorKey);setupListeners();");
+const boot = script.search(/document\.addEventListener\('keydown',\s*handleEvaluatorKey\);\s*setupListeners\(\);/);
 assert.ok(boot > 0, 'boot code');
 const main = {innerHTML: ''};
 const audio = {paused: true, plays: 0, pauses: 0,
@@ -48,7 +48,7 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
   assert.match(aside, /Space/);
   assert.match(aside, /Lựa chọn số 1 - số 5/);
   assert.equal((aside.match(/<kbd>1–5<\/kbd>/g) || []).length, 1);
-  assert.match(html, /grid-template-areas:"dock aside" "stage aside" "footer aside"/);
+  assert.match(html, /grid-template-areas:\s*"dock aside" "stage aside" "footer aside"/);
   assert.match(fn('stageContent')(), /1\. Đọc đúng/);
   assert.doesNotMatch(fn('stageContent')(), /Đủ nội dung mục tiêu/);
 
@@ -135,6 +135,15 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
   assert.equal(key('ArrowRight'), true);
   await tick();
   assert.equal(context.nextCalls, 1, 'right arrow opens next sample only after submission');
+  assert.equal(key('Enter'), true);
+  await tick();
+  assert.equal(context.nextCalls, 2, 'Enter opens next sample after submission');
+  const nextButton = {isContentEditable: false, closest: selector => selector === 'button' ? {id: 'nextAnnotation'} : null};
+  assert.equal(key('Enter', nextButton), true);
+  await tick();
+  assert.equal(context.nextCalls, 3, 'Enter on nextAnnotation button uses single handler');
+  assert.equal(key('Enter', statusButton), false, 'Enter on other buttons retains native action after submission');
+  assert.equal(context.nextCalls, 3);
 
   fn('renderGuide')();
   assert.match(main.innerHTML, /Quy trình ba bước/);
