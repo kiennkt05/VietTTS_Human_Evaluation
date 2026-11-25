@@ -47,7 +47,7 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
   assert.doesNotMatch(aside, /Nói nhanh, rõ ràng|Chỉ dẫn phong cách/);
   assert.match(aside, /Space/);
   assert.match(aside, /Lựa chọn số 1 - số 5/);
-  assert.doesNotMatch(aside, /<kbd>1–[35]<\/kbd>/);
+  assert.equal((aside.match(/<kbd>1–5<\/kbd>/g) || []).length, 1);
   assert.match(html, /grid-template-areas:"dock aside" "stage aside" "footer aside"/);
   assert.match(fn('stageContent')(), /1\. Đọc đúng/);
   assert.doesNotMatch(fn('stageContent')(), /Đủ nội dung mục tiêu/);
