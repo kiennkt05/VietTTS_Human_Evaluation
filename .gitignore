@@ -1,0 +1,29 @@
+# Local study data, uploaded audio, database, and A/B mapping secret.
+data/
+
+# Local configuration and generated files.
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.log
+Thumbs.db
+.DS_Store
+
+# Avoid committing media or local databases placed outside data/.
+*.wav
+*.mp3
+*.m4a
+*.ogg
+*.webm
+*.flac
+*.aac
+*.opus
+*.db
+*.db-shm
+*.db-wal
+.server_secret
