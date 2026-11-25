@@ -22,9 +22,11 @@ Với chế độ LAN, chia sẻ `http://<IP-máy-chủ>:8765` cho người đá
 
 Trang **Hướng dẫn** trong ứng dụng tự hiển thị nội dung phù hợp với quyền tài khoản.
 
-**Quản trị viên:** trong **Bộ dữ liệu**, tải audio thật, nhập `sample_id` duy nhất và transcript đúng nguyên văn, chọn `pilot` hoặc `main`, thêm chỉ dẫn phong cách, audio tham chiếu và metadata riêng tư nếu có. Manifest JSON có dạng `{"samples":[]}` và chỉ nhận sample. Trong **Tài khoản**, tạo tài khoản riêng cho từng evaluator; mục tiêu mặc định là **ba phiếu hoàn thành từ ba tài khoản khác nhau cho mỗi sample**. Trong **Kiểm soát nhãn**, xem số phiếu, độ chính xác nội dung, phân bố và độ chênh năm điểm theo giai đoạn. Trong **Xuất dữ liệu**, tải phiếu Single Audio dạng JSONL/CSV và metadata sample dạng JSONL.
+**Quản trị viên:** trong **Bộ dữ liệu**, tải audio thật, nhập `sample_id` duy nhất và transcript đúng nguyên văn, chọn `pilot` hoặc `main`, thêm chỉ dẫn phong cách và metadata riêng tư nếu có. Audio tham chiếu có thể được lưu trong bản ghi nguồn nhưng không hiển thị ở màn chấm. Manifest JSON có dạng `{"samples":[]}` và chỉ nhận sample. Trong **Tài khoản**, tạo tài khoản riêng cho từng evaluator; mục tiêu mặc định là **ba phiếu hoàn thành từ ba tài khoản khác nhau cho mỗi sample**. Trong **Kiểm soát nhãn**, xem số phiếu, độ chính xác nội dung, phân bố và độ chênh năm điểm theo giai đoạn. Trong **Xuất dữ liệu**, tải phiếu Single Audio dạng JSONL/CSV và metadata sample dạng JSONL.
 
-**Người đánh giá:** chọn đúng giai đoạn Pilot hoặc Chính thức, đọc văn bản mục tiêu và chỉ dẫn phong cách, nghe audio, chấm nội dung và năm điểm, kiểm tra rồi gửi. Nháp được lưu tự động. Phiếu đã gửi không thể tự sửa. Người đánh giá không thấy metadata riêng tư hoặc phiếu của người khác.
+**Người đánh giá:** chọn đúng giai đoạn Pilot hoặc Chính thức. Văn bản mục tiêu và audio luôn ở đầu phiếu. Quy trình có ba bước: **Kiểm tra đọc**; **Đánh giá** qua năm bước nhỏ, mỗi bước một tiêu chí; **Xác nhận** rồi gửi. Nháp được lưu tự động. Phiếu đã gửi không thể tự sửa. Người đánh giá không thấy metadata riêng tư hoặc phiếu của người khác.
+
+Phím tắt trong phiếu: `1/2/3` chọn trạng thái đọc; sau khi chọn Có lỗi, `a/b/c/d` bật hoặc tắt bốn loại lỗi. Trong từng bước nhỏ, `1–5` chọn điểm. `←/→` chuyển giữa các bước khi trường bắt buộc đã đủ; sau khi gửi, `→` mở mẫu tiếp theo. `Space` phát hoặc dừng audio ngoài ô nhập và trình phát. `Tab` chuyển tiêu điểm; `Enter` kích hoạt nút có tiêu điểm. Di chuột hoặc đặt tiêu điểm lên loại lỗi để xem giải thích.
 
 ## Nhãn Single Audio
 
@@ -50,6 +52,6 @@ Mỗi phiếu xuất giữ `sample_id`, username, giai đoạn, trạng thái, n
 
 ## Kiểm tra phần mềm và giới hạn
 
-Chạy `python -B -m unittest discover -s tests -v` trên Windows hoặc `python3 -B -m unittest discover -s tests -v` trên Linux/macOS. GitHub Actions chạy bộ kiểm tra trên cả ba hệ điều hành. Các thống kê QC mang tính mô tả; ứng dụng không tự tạo nhãn đúng cuối cùng hoặc xác nhận chất lượng nghiên cứu. Cần pilot thật với người đánh giá thật để đánh giá độ tin cậy.
+Chạy `python -B -m unittest discover -s tests -v` trên Windows hoặc `python3 -B -m unittest discover -s tests -v` trên Linux/macOS. Bộ kiểm tra tương tác giao diện dùng Node.js chuẩn: `node tests/test_ui_shortcuts.js`; Node.js chỉ cần cho kiểm thử, không cần để chạy ứng dụng. GitHub Actions chạy cả hai trên ba hệ điều hành. Các thống kê QC mang tính mô tả; ứng dụng không tự tạo nhãn đúng cuối cùng hoặc xác nhận chất lượng nghiên cứu. Cần pilot thật với người đánh giá thật để đánh giá độ tin cậy.
 
 Ứng dụng chỉ dành cho máy dự án hoặc LAN tin cậy. Nó không có TLS/HTTPS, khôi phục mật khẩu, khóa tài khoản hoặc các biện pháp bảo vệ cần thiết cho triển khai công khai. Nếu quên mật khẩu admin, không nên chỉnh SQLite thủ công. Đóng terminal sẽ dừng server; khởi động lại bằng launcher để tiếp tục với dữ liệu đã lưu.

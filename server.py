@@ -298,7 +298,7 @@ def queue_next(user, workflow, phase):
               VALUES(?,?,?,'{}',?,?)''',(user['id'],workflow,item_id,now,now))
         draft=c.execute('SELECT content,started_at,updated_at FROM drafts WHERE user_id=? AND workflow=? AND item_id=?',
                         (user['id'],workflow,item_id)).fetchone()
-        item=dict(c.execute('''SELECT sample_id,target_text,audio_url,style_instruction,reference_audio_url,phase
+        item=dict(c.execute('''SELECT sample_id,target_text,audio_url,style_instruction,phase
                               FROM samples WHERE sample_id=?''',(item_id,)).fetchone())
         item.pop('sample_id')
         return {'item':item,'task_token':task_token(user['id'],workflow,item_id),

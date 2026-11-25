@@ -151,6 +151,7 @@ class WorkflowTests(unittest.TestCase):
         status, queue, _ = self.request('/api/next?workflow=single&phase=pilot', cookie=cookie)
         self.assertEqual(status, 200)
         self.assertNotIn('sample_id', queue['item'])
+        self.assertNotIn('reference_audio_url', queue['item'])
         token = queue['task_token']
         self.assertEqual(self.request('/api/admin/export?kind=samples', cookie=cookie)[0], 403)
         self.assertEqual(self.request('/api/draft', 'POST',
