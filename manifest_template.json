@@ -1,3 +1,13 @@
 {
-  "samples": []
+  "samples": [
+    {
+      "sample_id": "",
+      "target_text": "",
+      "audio_url": "",
+      "phase": "",
+      "style_instruction": "",
+      "reference_audio_url": "",
+      "private_metadata": {}
+    }
+  ]
 }

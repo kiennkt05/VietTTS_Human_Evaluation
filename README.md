@@ -22,7 +22,7 @@ Với chế độ LAN, chia sẻ `http://<IP-máy-chủ>:8765` cho người đá
 
 Trang **Hướng dẫn** trong ứng dụng tự hiển thị nội dung phù hợp với quyền tài khoản.
 
-**Quản trị viên:** trong **Bộ dữ liệu**, tải audio thật, nhập `sample_id` duy nhất và transcript đúng nguyên văn, chọn `pilot` hoặc `main`, thêm chỉ dẫn phong cách và metadata riêng tư nếu có. Audio tham chiếu có thể được lưu trong bản ghi nguồn nhưng không hiển thị ở màn chấm. Manifest JSON có dạng `{"samples":[]}` và chỉ nhận sample. Trong **Tài khoản**, tạo tài khoản riêng cho từng evaluator; mục tiêu mặc định là **ba phiếu hoàn thành từ ba tài khoản khác nhau cho mỗi sample**. Trong **Kiểm soát nhãn**, xem số phiếu, độ chính xác nội dung, phân bố và độ chênh năm điểm theo giai đoạn. Trong **Xuất dữ liệu**, tải phiếu Single Audio dạng JSONL/CSV và metadata sample dạng JSONL.
+**Quản trị viên:** trong **Bộ dữ liệu**, tải audio thật, nhập `sample_id` duy nhất và transcript đúng nguyên văn, chọn `pilot` hoặc `main`, thêm chỉ dẫn phong cách và metadata riêng tư nếu có. Audio tham chiếu có thể được lưu trong bản ghi nguồn nhưng không hiển thị ở màn chấm. Dùng [manifest_template.json](manifest_template.json) hoặc nút **Tải khung manifest chuẩn** để chuẩn bị nhiều sample; manifest không nhận Pairwise. Trong **Tài khoản**, tạo tài khoản riêng cho từng evaluator; mục tiêu mặc định là **ba phiếu hoàn thành từ ba tài khoản khác nhau cho mỗi sample**. Trong **Kiểm soát nhãn**, xem số phiếu, độ chính xác nội dung, phân bố và độ chênh năm điểm theo giai đoạn. Trong **Xuất dữ liệu**, tải phiếu Single Audio dạng JSONL/CSV và metadata sample dạng JSONL.
 
 **Người đánh giá:** chọn đúng giai đoạn Pilot hoặc Chính thức. Văn bản mục tiêu và audio luôn ở đầu phiếu; tiến trình ba bước, năm bước nhỏ và phím tắt nằm trong panel bên phải trên màn hình rộng. Chỉ dẫn phong cách trong metadata nguồn không xuất hiện trên màn chấm. Quy trình có ba bước: **Kiểm tra đọc**; **Đánh giá** qua năm bước nhỏ, mỗi bước một tiêu chí; **Xác nhận** rồi gửi. Mỗi tiêu chí có năm hàng điểm theo thứ tự 5 đến 1, kèm mô tả đầy đủ của từng mức. Nháp được lưu tự động. Phiếu đã gửi không thể tự sửa. Người đánh giá không thấy metadata riêng tư hoặc phiếu của người khác.
 
@@ -40,7 +40,7 @@ Phím tắt trong phiếu: `1/2/3` chọn trạng thái đọc; sau khi chọn C
 | `audio_quality` | Chất lượng âm thanh | Rè, nhiễu, méo, clipping, glitch, đứt đoạn và artifact. |
 | `naturalness` | Độ tự nhiên tổng thể | Mức độ giống cách người thật nói trong ngữ cảnh, xét độc lập. |
 
-Thang điểm: **1 Rất kém** (lỗi nghiêm trọng), **2 Kém** (nhiều lỗi rõ), **3 Trung bình** (có lỗi nhận ra), **4 Tốt** (chỉ lỗi nhỏ), **5 Rất tốt** (gần như không có lỗi đáng kể). Trang Hướng dẫn có mô tả chi tiết cho cả năm mức của từng tiêu chí; màn chấm điểm nhắc mức 1/3/5. `naturalness` được chọn độc lập, **không tính trung bình bốn điểm khác**. Giọng trung tính phù hợp ngữ cảnh không tự động bị trừ điểm tự nhiên.
+Thang điểm: **1 Rất kém** (lỗi nghiêm trọng), **2 Kém** (nhiều lỗi rõ), **3 Trung bình** (có lỗi nhận ra), **4 Tốt** (chỉ lỗi nhỏ), **5 Rất tốt** (gần như không có lỗi đáng kể). Trang Hướng dẫn và màn chấm điểm có mô tả chi tiết cho cả năm mức của từng tiêu chí. `naturalness` được chọn độc lập, **không tính trung bình bốn điểm khác**. Giọng trung tính phù hợp ngữ cảnh không tự động bị trừ điểm tự nhiên.
 
 `confidence` (`low`/`medium`/`high`) và `note` là tùy chọn. `invalid` dành cho file hoặc dữ liệu hỏng khiến không thể đánh giá; `skipped` dành cho trường hợp bỏ qua. Cả hai cần lý do và không được tính là phiếu hoàn thành. Audio đọc sai nội dung vẫn được chấm `has_error`, không tự động là `invalid`.
 
@@ -49,6 +49,8 @@ Thang điểm: **1 Rất kém** (lỗi nghiêm trọng), **2 Kém** (nhiều l�
 Thư mục `data/` gồm `annotations.db`, `media/` và `.server_secret`. Sao lưu **cả thư mục** khi máy chủ đã dừng. Repository và GitHub không chứa thư mục này; sao chép repository sang máy khác sẽ bắt đầu với bộ dữ liệu trống. Khi chuyển nghiên cứu, chuyển cả thư mục `data/` qua kênh tin cậy.
 
 Mỗi phiếu xuất giữ `sample_id`, username, giai đoạn, trạng thái, nhãn nội dung, năm điểm, confidence, note và mốc thời gian. CSV có cột ổn định kể cả khi chưa có phiếu. File JSONL/CSV không chứa binary audio. Manifest nhập mẫu chỉ gồm trường `samples`; mỗi sample yêu cầu `sample_id`, `target_text`, `audio_url` (file `/media/...` đã upload hoặc HTTPS); có thể thêm `phase`, `style_instruction`, `reference_audio_url`, `private_metadata`. Nhập một manifest là giao dịch nguyên tử. File audio nhận `.wav`, `.mp3`, `.m4a`, `.ogg`, `.webm`, `.flac`, `.aac`, `.opus` tối đa 60 MB; manifest JSON tối đa 4 MB mỗi yêu cầu. Việc kiểm tra header không thay thế kiểm tra audio thực sự phát được; trình duyệt có thể hỗ trợ codec khác nhau.
+
+Khung manifest chứa một object sample với toàn bộ tên trường được hỗ trợ và giá trị trống. Điền `sample_id` duy nhất (tối đa 100 ký tự, chỉ gồm chữ/số và `.`, `_`, `:`, `-`), `target_text` đúng nguyên văn, `audio_url` có thật và `phase` là `pilot` hoặc `main`, rồi nhân bản object nếu cần thêm sample. Có thể để trống `style_instruction`, `reference_audio_url` và `private_metadata`; nếu có audio tham chiếu, URL cũng phải là `/media/...` đã upload hoặc HTTPS. Khung chưa điền sẽ bị từ chối khi import; nó không tạo dữ liệu giả trong hệ thống.
 
 ## Kiểm tra phần mềm và giới hạn
 

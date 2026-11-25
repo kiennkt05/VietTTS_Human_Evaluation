@@ -32,6 +32,7 @@ DATA = Path(os.environ.get('TTS_DATA_DIR', str(ROOT / 'data'))).resolve()
 MEDIA = DATA / 'media'
 DBPATH = DATA / 'annotations.db'
 HTML = ROOT / 'index.html'
+MANIFEST_TEMPLATE = ROOT / 'manifest_template.json'
 LOCK = threading.RLock()
 MAX_UPLOAD = 60 * 1024 * 1024
 MAX_JSON = 4 * 1024 * 1024
@@ -457,6 +458,11 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path=='/favicon.ico':
             self.send_bytes(b'',status=204);return
+        if path=='/api/admin/manifest-template':
+            auth(self,True)
+            self.send_bytes(MANIFEST_TEMPLATE.read_bytes(),'application/json; charset=utf-8',
+                            extra={'Content-Disposition':'attachment; filename="tts_manifest_template.json"'})
+            return
         if path.startswith('/media/'):
             auth(self)
             name=path[len('/media/'):]

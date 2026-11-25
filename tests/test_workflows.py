@@ -231,6 +231,25 @@ class WorkflowTests(unittest.TestCase):
                                                        'audio_url': url}]}, self.admin)
         self.assertEqual((status, result['imported_samples']), (201, 1))
 
+    def test_manifest_template_matches_import_fields(self):
+        self.assertEqual(self.request('/api/admin/manifest-template')[0], 401)
+        status, manifest, headers = self.request('/api/admin/manifest-template', cookie=self.admin)
+        self.assertEqual(status, 200)
+        self.assertIn('attachment', headers['Content-Disposition'])
+        self.assertEqual(list(manifest), ['samples'])
+        self.assertEqual(len(manifest['samples']), 1)
+        sample = manifest['samples'][0]
+        self.assertEqual(set(sample), {'sample_id', 'target_text', 'audio_url', 'phase',
+                                       'style_instruction', 'reference_audio_url', 'private_metadata'})
+        self.assertEqual([sample[key] for key in ('sample_id', 'target_text', 'audio_url', 'phase')],
+                         ['', '', '', ''])
+        self.assertEqual(sample['private_metadata'], {})
+        self.assertEqual(self.request('/api/admin/import', 'POST', manifest, self.admin)[0], 400)
+        sample.update(sample_id='template_sample', target_text='Văn bản kiểm tra.',
+                      audio_url=self.audio_url(), phase='pilot')
+        status, result, _ = self.request('/api/admin/import', 'POST', manifest, self.admin)
+        self.assertEqual((status, result['imported_samples']), (201, 1))
+
     def test_empty_csv_has_stable_columns(self):
         for kind, columns in [('single_annotations_csv', server.SINGLE_EXPORT_COLUMNS)]:
             status, raw, _ = self.request('/api/admin/export?kind=' + kind, cookie=self.admin)
