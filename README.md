@@ -1,5 +1,13 @@
 # VietTTS — Đánh giá TTS tiếng Việt
 
+| Đăng nhập | Bước 1: Kiểm tra đọc |
+| --- | --- |
+| ![Màn hình đăng nhập](images/login.png) | ![Bước 1: Kiểm tra độ chính xác nội dung](images/step1.png) |
+
+| Bước 2: Đánh giá theo từng tiêu chí | Bước 3: Xác nhận và gửi nhãn |
+| --- | --- |
+| ![Bước 2: Đánh giá theo từng tiêu chí](images/step2.png) | ![Bước 3: Xác nhận và gửi nhãn](images/step3.png) |
+
 Ứng dụng nội bộ để **người thật đánh giá từng audio tiếng Việt**. Mỗi phiếu Single Audio có một trạng thái chính xác nội dung, loại lỗi khi cần, **năm điểm chất lượng độc lập từ 1 đến 5**, cùng độ tự tin và ghi chú tùy chọn. Giao diện sáng là mặc định. Kho mã không chứa audio hoặc nhãn giả lập.
 
 Ứng dụng dùng Python chuẩn (không cần `pip`), SQLite và trình duyệt. Dữ liệu nghiên cứu nằm trong thư mục `data/` ngoài Git.
